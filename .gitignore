@@ -58,3 +58,6 @@ sysinfo.txt
 # Crashlytics generated file
 crashlytics-build.properties
 
+# Example Assets are not needed
+[Aa]ssets/ExampleAssets
+[Aa]ssets/ExampleAssets.meta
