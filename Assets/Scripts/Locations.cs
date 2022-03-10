@@ -34,8 +34,8 @@ public class Locations : MonoBehaviour
 
     // Just to test on laptop.
     // Note that fake gps will be used with jessup_gps_location as origin. Hence 0,0 isn't rlly 0,0 in gps reading.
-    public Vector3 fake_gps; // x: lati, y: alti, z: long
-    bool use_fake_gps;
+    //public Vector3 fake_gps; // x: lati, y: alti, z: long
+    public bool use_fake_gps{get; private set;}
 
     void Awake()
     {
@@ -79,12 +79,12 @@ public class Locations : MonoBehaviour
                 time_disp_2.text = string.Format("{0}:{1}:{2}",t.Hour,t.Minute,t.Second);
             }
         } else if (use_fake_gps) {
-            lati_txt.text = string.Format("Latitude: {0}", jessup_gps_location.x + fake_gps.x);
-            long_txt.text = string.Format("Longitude: {0}", jessup_gps_location.z + fake_gps.z);
-            alti_txt.text = string.Format("Altitude: {0}", jessup_gps_location.y + fake_gps.y);
-            displ = GPSEncoder.GPSToUCS(jessup_gps_location.x + fake_gps.x, jessup_gps_location.z + fake_gps.z) - 
-                    GPSEncoder.GPSToUCS(jessup_gps_location.x, jessup_gps_location.z);
-            displ_txt.text = string.Format("Displacement:\nx:{0:0.0####}, \ny:{1:0.0####}, \nz:{2:0.0####}", displ.x, displ.y, displ.z);
+            displ_txt.text = string.Format("Displacement:\nx:{0:0.0####}, \ny:{1:0.0####}, \nz:{2:0.0####}",
+                Map.main.user_pos.position.x, Map.main.user_pos.position.y, Map.main.user_pos.position.z);
+            Vector2 fake_gps = GPSEncoder.USCToGPS(Map.main.user_pos.position);
+            lati_txt.text = string.Format("Latitude: {0}", fake_gps.x);
+            long_txt.text = string.Format("Longitude: {0}", fake_gps.y);
+            alti_txt.text = string.Format("Altitude: {0}", "N/A");
 
             if (Input.GetKey("left")) bearing_fake_rot += 0.2f;
             if (Input.GetKey("right")) bearing_fake_rot -= 0.2f;
