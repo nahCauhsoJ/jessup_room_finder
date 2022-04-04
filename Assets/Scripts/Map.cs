@@ -9,7 +9,11 @@ public class Map : MonoBehaviour
     public GameObject map_view; // This is the parent object that contains the map
     public GameObject map_obj; // the 2D map object
     public UserControl user_pin; //The user's pin
+    public GameObject user_pin_inactive;
     public GameObject cam_target; // The actual spot the virtual camera is aiming at. For offsets.
+
+    public MapStructureTransition structure_transition;
+    public MapStructures current_structure;
 
     public Transform path_links_list; // This is the parent to instantiate the route's links.
     public GameObject path_tobedone_prefab; // This prefab shows where the user should go.
@@ -52,7 +56,7 @@ public class Map : MonoBehaviour
     void Awake()
     {
         main = this;
-        //map_rot_orig = user_pos.rotation;
+        //map_rot_orig = user_pos.transform.rotation;
 
         map_scale_orig = map_view.transform.position.z;
         map_offset_orig = map_view.transform.position;
@@ -60,26 +64,19 @@ public class Map : MonoBehaviour
 
         user_pos = user_pin.transform;
     }
-    void OnEnable() { if (map_view != null) { map_view.SetActive(true); map_obj.SetActive(true); } }
-    void OnDisable() { if (map_view != null) { map_view.SetActive(false); map_obj.SetActive(false); } }
-
-    /*
-    // Specialized for fixing bad node links.
-    // [Steps to use]
-    //  1. Uncomment this and save.
-    //  2. Compile and let Unity reload. Watch the bad links getting fix after reload.
-    //  3. Comment this again and save.
-    bool fix_ran = false;
-    void OnValidate()
+    void Start()
     {
-        if (fix_ran) return; fix_ran = true;
-        PathBuilder.FixNodeLinks(new List<MapNodes>(Object.FindObjectsOfType<MapNodes>()));
-    }*/
+        ZoomMap(0);
+        MapMenu.main.OnSearchClick();
+    }
+    void OnEnable() { if (map_view != null && map_obj != null) { map_view.SetActive(true); map_obj.SetActive(true); } }
+    void OnDisable() { if (map_view != null && map_obj != null) { map_view.SetActive(false); map_obj.SetActive(false); } }
 
     void Update()
     {
         UpdateMapView();
         if (path_target_link.gameObject.activeSelf && path_link_using_gps) UpdateTargetNode();
+        if (!user_pin.gameObject.activeInHierarchy) user_pin_inactive.transform.position = user_pin.transform.position;
     }
 
 
@@ -90,10 +87,15 @@ public class Map : MonoBehaviour
     public void DragMap(Vector2 drag_dist_ratio)
     {
         //was_dragging = true;
-        map_offset_current = drag_dist_ratio * map_offset_const;
+        //map_offset_current = drag_dist_ratio * map_offset_const * Mathf.Max(map_scale_orig - map_scale, 1f);
+        map_offset_current = drag_dist_ratio;
     }
     public void DragMapEnd() { map_offset += map_offset_current; map_offset_current = Vector2.zero; }
         //was_dragging = false; //was_zooming = false; }
+    public void DragMapReset()
+    {
+        map_offset = (Vector2) user_pin.transform.position;
+    }
 
     public void ZoomMap(float zoom_dist_ratio)
     {
@@ -113,24 +115,28 @@ public class Map : MonoBehaviour
 
     void UpdateMapView()
     {
-        cam_target.transform.localPosition = new Vector3(
+        /* cam_target.transform.position = new Vector3(
+            user_pin.transform.position.x + map_offset.x + map_offset_current.x, 
+            user_pin.transform.position.y + map_offset.y + map_offset_current.y, 
+            map_scale + map_scale_current + map_scale_orig
+        ); */
+        cam_target.transform.position = new Vector3(
             map_offset.x + map_offset_current.x, 
-            map_offset.y + map_offset_current.y, 
+            map_offset.y + map_offset_current.y,
             map_scale + map_scale_current + map_scale_orig
         );
 
         // If using fake gps, might as well let the editor move it instead.
-        if (!Locations.main.use_fake_gps)
-            user_pos.position = new Vector3(
+        if (!Locations.main.use_fake_gps && Locations.main.use_real_time_gps_tracking)
+            user_pos.transform.position = new Vector3(
                 map_origin_offset.x + Locations.main.displ.x / map_offset_scale.x,
                 map_origin_offset.y + Locations.main.displ.z / map_offset_scale.y,
                 -0.1f);
 
         // If it's not on, it'll use the fake rotation for now.
         //if (Locations.main.loc_service_on) 
-        user_pos.rotation = map_rot_orig * Quaternion.Euler(0,0,-Locations.main.bearing_current);
+        user_pos.transform.rotation = Quaternion.Euler(0,0,-Locations.main.bearing_current);
     }
-
 
 
 
@@ -169,22 +175,25 @@ public class Map : MonoBehaviour
 
         current_route = preset_route == null ?
             PathBuilder.GetPath(
-            PathBuilder.GetClosestPoint(user_pos.position, MapNodes.nodes),
+            PathBuilder.GetClosestPoint(user_pos.transform.position, MapNodes.nodes),
             end_node,
             MapNodes.nodes) : preset_route;
+        if (preset_route != null) end_node = preset_route[preset_route.Count - 1];
         if (current_route == null)
         {   // It means a route cannot be found, which is normally impossible. Hence a bug is inside.
             print("Route not found");
             return;
         }
-
         for (var i = 0; i < current_route.Count - 1; i++)
             current_route_links.Add(CreateLink(current_route[i],current_route[i+1]));
 
         path_target_link.gameObject.SetActive(path_link_using_gps);
         user_pin.gameObject.SetActive(true);
+        user_pin_inactive.SetActive(false);
+        DragMapReset(); // I don't see why not.
+        UserControl.main.InitiateDestinations(new MapNodes[]{end_node});
         current_route_target_ix = 0;
-        current_route_remaining = new List<MapNodes>(current_route);
+        current_route_remaining = new List<MapNodes>(current_route); // It includes the target node.
     }
 
     // This is much less expensive than SetupRoute(). Use only when it's only just adding an extra node to the front.
@@ -207,10 +216,11 @@ public class Map : MonoBehaviour
                 //      This means a reroute, but due to the simple operations, this function will handle it as an exception.
                 current_route = new List<MapNodes>{node};
                 current_route.AddRange(current_route_remaining);
+                current_route_target_ix--; // Since it's needed before turning to 0, and needs to retarget to this new node.
                 foreach (var i in current_route_links.GetRange(0,current_route_target_ix)) Destroy(i);
                 current_route_links = new List<GameObject>(
                     current_route_links.GetRange(current_route_target_ix, current_route_links.Count - current_route_target_ix));
-                CreateLink(current_route[0], current_route[1], current_route_links[current_route_target_ix-1]);
+                CreateLink(current_route[0], current_route[1], current_route_links[current_route_target_ix]);
                 current_route_target_ix = 0;
             }
         } else {
@@ -231,7 +241,6 @@ public class Map : MonoBehaviour
             ArrivedDestination();
             return;
         }
-
         for (var i = 0; i < amount; i++)
         {
             current_route_links[current_route_target_ix + i].SetActive(false);
@@ -244,18 +253,22 @@ public class Map : MonoBehaviour
     // This moves the link between user position and the target node.
     public void UpdateTargetNode()
     {
-        path_target_link.position = (user_pos.position + current_route[current_route_target_ix].transform.position) / 2;
-        Vector3 rel_pos = user_pos.InverseTransformPoint(current_route[current_route_target_ix].transform.position);
+        path_target_link.position = (user_pin.transform.position + current_route[current_route_target_ix].transform.position) / 2;
+        Vector3 rel_pos = current_route[current_route_target_ix].transform.InverseTransformPoint(user_pos.transform.position);
         path_target_link.rotation = Quaternion.Euler(0,0, 90 - Mathf.Atan2(rel_pos.x, rel_pos.y) * Mathf.Rad2Deg);
         path_target_link.localScale = new Vector3(
-            Vector3.Distance(user_pos.position, current_route[current_route_target_ix].transform.position), 
+            Vector3.Distance(user_pos.transform.position, current_route[current_route_target_ix].transform.position), 
             path_target_link.localScale.y,1f);
     }
 
     public void ArrivedDestination()
     {
-        print("arrived");
+        MainNode dest_node = (MainNode) current_route[current_route.Count - 1];
+        string dest_name = dest_node.disp_name.Length > 0 ? dest_node.disp_name : dest_node.id;
+        FloatMessage.Send(string.Format("You arrived at \n{0}.", dest_name));
+        user_pin_inactive.SetActive(true);
         user_pin.gameObject.SetActive(false);
         path_target_link.gameObject.SetActive(false);
+        MapMenu.main.OnSearchClick();
     }
 }

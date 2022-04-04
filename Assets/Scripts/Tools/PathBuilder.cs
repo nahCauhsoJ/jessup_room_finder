@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEditor;
 
 public static class PathBuilder
 {
@@ -36,7 +35,9 @@ public static class PathBuilder
 
             foreach (var i in best_node.links)
             {
+                if (i == null) continue; // Sometimes the links can be missing. If not take this away.
                 if (used_nodes.Contains(i)) continue;
+
                 float g_cost = Vector3.Distance(i.transform.position, start_node.transform.position);
                 float h_cost = Vector3.Distance(i.transform.position, end_node.transform.position);
                 astar_costs[i] = new float[]{g_cost,h_cost};
@@ -65,60 +66,14 @@ public static class PathBuilder
         return null;
     }
 
-    // I'm too lazy. Let's have this function fix everything.
-    // Note that it only fix links by making one-sided links two-sided and remove duplicate / empty links.
-    // It also overwrites all the affected nodes's links.
-    public static void FixNodeLinks(List<MapNodes> nodes)
+    // This is assumed that it is a valid path from GetPath().
+    public static float GetPathLength(List<MapNodes> nodes)
     {
-        foreach (var i in nodes)
-        {
-            List<MapNodes> used_links = new List<MapNodes>();
-            foreach (var j in i.links)
-            {
-                if (j == null) continue;
-                if (used_links.Contains(j)) continue;
-                used_links.Add(j);
-                if (!j.links.Contains(i)) j.links.Add(i);
-            }
+        if (nodes.Count <= 1) return 0;
 
-            //i.links = new List<MapNodes>(used_links); // Cuz why not. It's only gonna run once.
-            //i.links_old = new List<MapNodes>(used_links);
-
-            if (i.gameObject.name == "cafeteria")
-            {
-                SerializedObject so_node = new SerializedObject(i);
-                SerializedProperty node_links = so_node.FindProperty("links");
-                SerializedProperty node_links_old = so_node.FindProperty("links_old");
-                node_links.ClearArray();
-                node_links_old.ClearArray();
-                for (var j = 0; j < used_links.Count; j++)
-                {
-                    node_links.InsertArrayElementAtIndex(j);
-                    node_links_old.InsertArrayElementAtIndex(j);
-                    //Debug.Log(node_links.GetArrayElementAtIndex(j).objectReferenceValue);
-                    //Debug.Log(used_links[j]);
-                    node_links.GetArrayElementAtIndex(j).objectReferenceValue = used_links[j];
-                    node_links.GetArrayElementAtIndex(j).objectReferenceValue = used_links[j];
-                    //Debug.Log(node_links.GetArrayElementAtIndex(j).objectReferenceValue);
-                    //node_links[j] = used_links[j];
-                    //node_links_old[j] = used_links[j];
-                }
-                so_node.ApplyModifiedProperties();
-            }
-            
-            /*
-            SerializedObject so_node = new SerializedObject(i);
-            if (i.links.Count != i.links_old.Count)
-            {
-                Debug.Log(i.gameObject.name);
-                Debug.Log(so_node.FindProperty("links").arraySize);
-                so_node.FindProperty("links").ClearArray();
-                Debug.Log(so_node.FindProperty("links").arraySize);
-                Debug.Log(((MapNodes)so_node.targetObject).links.Count);
-                so_node.ApplyModifiedProperties();
-                Debug.Log(so_node.FindProperty("links").arraySize);
-                Debug.Log(((MapNodes)so_node.targetObject).links.Count);
-            }*/
-        }
+        float total_dist = 0f;
+        for (var i = 1; i < nodes.Count; i++)
+            total_dist += Vector3.Distance(nodes[i].transform.position, nodes[i-1].transform.position);
+        return total_dist;
     }
 }

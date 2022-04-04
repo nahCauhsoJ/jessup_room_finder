@@ -8,20 +8,14 @@ using System;
 public class MapNodes : MonoBehaviour
 {
     public string id; // It'll be the identifier of the node when stored in text file.
-    [TextArea] public string desc;
-    public string disp_name; // If omitted, it'll use id as the name instead. For display and searching.
-    public string[] search_keys; // Some places have aliases, so this makes searching easier.
     public List<MapNodes> links;
+    public string derived_obj{get; protected set;} // This way, GetComponent() only runs on the correct type and I'm not using built-in tags for now.
 
     public static List<MapNodes> nodes = new List<MapNodes>();
-    public static List<MapNodes> main_nodes = new List<MapNodes>();
+    public static List<MainNode> main_nodes = new List<MainNode>();
 
-    public bool is_main_spot; // If so, its disp_name will be submitted for searching.
-    public MapNodes alt_spot_of; // If not null, reaching it equals reaching the said main spot.
-
-    void Awake() {
+    protected virtual void Awake() {
         nodes.Add(this);
-        if (is_main_spot) main_nodes.Add(this);
     }
 
 /*
@@ -37,10 +31,10 @@ public class MapNodes : MonoBehaviour
     //      trying to Undo a wrong link.
     [NonSerialized] public List<MapNodes> links_old = new List<MapNodes>();
     // To auto-link the nodes for the other side when 1 is linked, also remove link on both sides if 1 is removed.
-    void OnValidate()
+    protected virtual void OnValidate()
     {
         if (Application.isPlaying) return;
-
+        
         if (links_old.Count > links.Count)
         {
             foreach (var i in links_old.Except(links))
@@ -68,7 +62,7 @@ public class MapNodes : MonoBehaviour
     }
 
     // To draw the nodes
-    void OnDrawGizmos()
+    protected virtual void OnDrawGizmos()
     {
         Gizmos.color = Color.black;
         foreach (var i in links)

@@ -61,3 +61,7 @@ crashlytics-build.properties
 # Example Assets are not needed
 [Aa]ssets/ExampleAssets
 [Aa]ssets/ExampleAssets.meta
+
+# No shipping
+*_BurstDebugInformation_DoNotShip
+*_BackUpThisFolder_ButDontShipItWithYourGame

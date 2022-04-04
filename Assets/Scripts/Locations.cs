@@ -1,36 +1,32 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 
 public class Locations : MonoBehaviour
 {
     public static Locations main;
 
-    public Text conn_status;
-    public Text lati_txt;
-    public Text long_txt;
-    public Text alti_txt;
-    public Text time_disp;
-
-    public float accel_txt_update_time;
-    public Text displ_txt;
-    public Text accel_txt;
-    public Text bearing_txt;
-    public Text time_disp_2;
-
+    public bool use_gps;
+    public bool use_compass;
+    public Vector3 jessup_gps_location; // For altitude, just choose a point and that's our ground level.
+    public double jessup_gps_latitude;
+    public double jessup_gps_longitude;
     public float bearing_max_vel;
     float bearing_smooth_vel;
     public float bearing_current{get; private set;}
     public float bearing_fake_rot; // For debugging use. Use left and right arrow to change it slowly.
 
-    public Vector3 jessup_gps_location; // For altitude, just choose a point and that's our ground level.
+    public bool use_real_time_gps_tracking; // It was a legacy design. Until gps gives a more accurate position, I doubt it will be used.
 
     public bool loc_service_on{get; private set;}
-    double last_updated_time;
+    public static gps_status conn_status;
+    public enum gps_status {Disabled, Unavailable, Connecting, TimeOut, ConnectUnable, Connected};
+    public int gps_conn_max_wait = 10; // This is the max tries the system will attempt to connect to the device's GPS.
+    public int gps_conn_cur_wait{get; private set;} // This is the number of tries remaining.
+
+    public double last_updated_time{get; private set;}
     public Vector3 displ{get; private set;} = Vector3.zero;
     Vector3 accel = Vector3.zero;
-    float cur_accel_txt_update_time;
 
     // Just to test on laptop.
     // Note that fake gps will be used with jessup_gps_location as origin. Hence 0,0 isn't rlly 0,0 in gps reading.
@@ -40,56 +36,28 @@ public class Locations : MonoBehaviour
     void Awake()
     {
         main = this;
-        GPSEncoder.SetLocalOrigin(new Vector2 (jessup_gps_location.x, jessup_gps_location.z));
+        GPSEncoder.SetLocalOrigin(new Vector2 ((float) jessup_gps_latitude, (float) jessup_gps_longitude));
     }
 
     // Start is called before the first frame update
     void Start()
     {
-        StartCoroutine(StartLocationService());
+        if (use_gps) StartupGps();
         //Input.gyro.enabled = true;
     }
 
     // Update is called once per frame
     void Update()
     {
-        System.DateTime t = System.DateTime.Now;
-
-        if (loc_service_on && last_updated_time != Input.location.lastData.timestamp)
-        {
-            last_updated_time = Input.location.lastData.timestamp;
-            lati_txt.text = string.Format("Latitude: {0}", Input.location.lastData.latitude);
-            long_txt.text = string.Format("Longitude: {0}", Input.location.lastData.longitude);
-            alti_txt.text = string.Format("Altitude: {0}", Input.location.lastData.altitude);
-            time_disp.text = string.Format("{0}:{1}:{2}",t.Hour,t.Minute,t.Second);
-        }
-
         if (loc_service_on)
         {
+            last_updated_time = Input.location.lastData.timestamp;
             bearing_current = Mathf.SmoothDampAngle(bearing_current, Input.compass.trueHeading, ref bearing_smooth_vel, bearing_max_vel);
-            bearing_txt.text = string.Format("Bearing: {0}", bearing_current);
 
-            cur_accel_txt_update_time += Time.deltaTime;
-            if (cur_accel_txt_update_time >= accel_txt_update_time)
-            {
-                cur_accel_txt_update_time = 0;
-                displ = GPSEncoder.GPSToUCS(Input.location.lastData.latitude, Input.location.lastData.longitude) - 
-                        GPSEncoder.GPSToUCS(jessup_gps_location.x, jessup_gps_location.z);
-                displ_txt.text = string.Format("Displacement:\nx:{0:0.0####}, \ny:{1:0.0####}, \nz:{2:0.0####}", displ.x, displ.y, displ.z);
-                time_disp_2.text = string.Format("{0}:{1}:{2}",t.Hour,t.Minute,t.Second);
-            }
         } else if (use_fake_gps) {
-            displ_txt.text = string.Format("Displacement:\nx:{0:0.0####}, \ny:{1:0.0####}, \nz:{2:0.0####}",
-                Map.main.user_pos.position.x, Map.main.user_pos.position.y, Map.main.user_pos.position.z);
-            Vector2 fake_gps = GPSEncoder.USCToGPS(Map.main.user_pos.position);
-            lati_txt.text = string.Format("Latitude: {0}", fake_gps.x);
-            long_txt.text = string.Format("Longitude: {0}", fake_gps.y);
-            alti_txt.text = string.Format("Altitude: {0}", "N/A");
-
-            if (Input.GetKey("left")) bearing_fake_rot += 0.2f;
-            if (Input.GetKey("right")) bearing_fake_rot -= 0.2f;
+            if (Input.GetKey("left")) bearing_fake_rot += 1f;
+            if (Input.GetKey("right")) bearing_fake_rot -= 1f;
             bearing_current = Mathf.SmoothDampAngle(bearing_current, bearing_fake_rot, ref bearing_smooth_vel, bearing_max_vel);
-            bearing_txt.text = string.Format("Bearing: {0}", bearing_current);
         }
 
         /*
@@ -110,40 +78,55 @@ public class Locations : MonoBehaviour
     {
         if (!Input.location.isEnabledByUser)
         {
-            conn_status.text = "No GPS Chip";
+            conn_status = gps_status.Unavailable;
             use_fake_gps = true;
             yield break;
         }
 
         Input.location.Start(1f,1f);
 
-        conn_status.text = "Connecting...";
-        int maxWait = 10;
-        int curWait = maxWait;
-        while (Input.location.status == LocationServiceStatus.Initializing && curWait > 0)
+        conn_status = gps_status.Connecting;
+        gps_conn_cur_wait = gps_conn_max_wait;
+        while (Input.location.status == LocationServiceStatus.Initializing && gps_conn_cur_wait > 0)
         {
             yield return new WaitForSeconds(1);
-            conn_status.text = string.Format("Connecting... (Tries: {0}/{1})",curWait,maxWait);
-            curWait--;
+            gps_conn_cur_wait--;
         }
 
-        if (curWait < 1)
+        if (gps_conn_cur_wait < 1)
         {
-            conn_status.text = "Time Out";
+            conn_status = gps_status.TimeOut;
             yield break;
         }
 
         // If the connection failed this cancels location service use.
         if (Input.location.status == LocationServiceStatus.Failed)
         {
-            conn_status.text = "Failed";
+            conn_status = gps_status.ConnectUnable;
             yield break;
         }
         else
         {
-             conn_status.text = "Connected";
+            conn_status = gps_status.Connected;
             loc_service_on = true;
             Input.compass.enabled = true;
         }
+    }
+
+
+
+    public void StartupGps()
+    {
+        StartCoroutine(StartLocationService());
+    }
+
+    // Running this assumes that loc_service_on is true. Use ways to prevent it from running otherwise.
+    public Vector3 GetPosByGps()
+    {
+        if (!loc_service_on) return Vector3.zero; // Just in case somebody can use it.
+
+        displ = GPSEncoder.GPSToUCS(Input.location.lastData.latitude, Input.location.lastData.longitude) - 
+                        GPSEncoder.GPSToUCS((float) jessup_gps_latitude, (float) jessup_gps_longitude);
+        return new Vector3(displ.x, displ.z, 0);
     }
 }

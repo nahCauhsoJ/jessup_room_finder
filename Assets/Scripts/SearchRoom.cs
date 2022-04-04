@@ -14,7 +14,8 @@ public class SearchRoom : MonoBehaviour
     public List<UnityEngine.UI.Image> top_result_image{get; private set;}
     public List<TMP_Text> top_result_text{get; private set;} // Note that these 2 top_result components are parallel.
 
-    List<MapNodes> search_result = new List<MapNodes>();
+    List<MainNode> search_result = new List<MainNode>();
+    MapNodes chosen_destination; // If it's not null, it is most likely asking where the user is.
 
     void Awake()
     {
@@ -30,11 +31,11 @@ public class SearchRoom : MonoBehaviour
         gameObject.SetActive(false); // The search bar is disabled by default, but needs to populate main if it wants to be activated.
     }
 
-    public List<MapNodes> GetMatches(string pattern)
+    public List<MainNode> GetMatches(string pattern)
     {
         // This is to remove whitespace and convert them to lower casing.
         pattern = string.Join("", pattern.Split(default(string[]), System.StringSplitOptions.RemoveEmptyEntries)).ToLower();
-        List<MapNodes> result = new List<MapNodes>();
+        List<MainNode> result = new List<MainNode>();
         foreach (var i in MapNodes.main_nodes)
         {
             if (i.id.Contains(pattern)) { result.Add(i); continue; }
@@ -43,7 +44,7 @@ public class SearchRoom : MonoBehaviour
         return result;
     }
 
-    public List<MapNodes> SortAlphabet(List<MapNodes> matches)
+    public List<MainNode> SortAlphabet(List<MainNode> matches)
     {
         return matches.OrderBy(x => x.id).ToList();
     }
@@ -64,12 +65,12 @@ public class SearchRoom : MonoBehaviour
         for (var i = 0; i < Mathf.Min(search_result.Count, top_result_text.Count); i++)
         {
             top_result_text[i].text = search_result[i].disp_name.Length > 0 ? search_result[i].disp_name : search_result[i].id;
-            top_result_image[i].enabled = true;
+            top_result_image[i].gameObject.SetActive(true);
         }
         for (var i = top_result_text.Count - 1; i >= search_result.Count; i--)
         {   // This takes out the top result boxes if not needed. If search_result.Count exceeds, this won't run.
             top_result_text[i].text = string.Empty;
-            top_result_image[i].enabled = false;
+            top_result_image[i].gameObject.SetActive(false);
         }
         top_result_more.gameObject.SetActive(search_result.Count > top_result_text.Count);
     }
@@ -77,7 +78,6 @@ public class SearchRoom : MonoBehaviour
     public void OnSelectTopResult(TMP_Text txt_obj)
     {
         MapNodes destination = null;
-        DebugLog.List(search_result);
         foreach (var i in search_result.GetRange(0,Mathf.Min(search_result.Count, top_result_text.Count)))
         {
             if (i.disp_name == txt_obj.text || i.id == txt_obj.text)
@@ -89,8 +89,19 @@ public class SearchRoom : MonoBehaviour
 
         if (destination != null)
         {
-            Map.main.SetupRoute(destination);
+            chosen_destination = destination;
             MapMenu.main.OnDropdownClick();
+            MapMenu.main.OnMoveClick();
+            MoveUser.Recenter();
+            MoveUser.main.needs_confirm = true;
         }
+    }
+
+    public void UserPinpointedSignal()
+    {
+        if (chosen_destination == null) return;
+
+        Map.main.SetupRoute(chosen_destination);
+        chosen_destination = null;
     }
 }
