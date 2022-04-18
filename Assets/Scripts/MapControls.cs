@@ -27,10 +27,10 @@ public class MapControls : MonoBehaviour
     bool fing1_moved;
     bool fing1_holding; // If true, user is holding the finger istead of tapping.
 
-    Vector2 screen_world_ratio;
+    // It's static since it's basically THE variable to define the map's scale.
+    public static Vector2 screen_world_ratio;
     // Since it requires the camera's position, and it only moves to the correct distance after 1 LateUpdate() in Map,
     //      it is best to initialize it on the first map dragging.
-    bool screen_world_ratio_init; 
 
     public static bool isTapped{get; private set;}
     public static bool isHeldDown{get; private set;}
@@ -47,6 +47,8 @@ public class MapControls : MonoBehaviour
         fing1.phase = TouchPhase.Canceled; // This is to make sure TouchPhase doesn't start with Begin.
         fing2.phase = TouchPhase.Canceled;
     }
+
+    void Start() { UpdateScreenToWorldRatio(); }
 
     void Update()
     {
@@ -144,12 +146,12 @@ public class MapControls : MonoBehaviour
         switch(finger)
         {
             case 1://print("up 1");
-                if (!fing2_down && fing1_holding) Map.main.ZoomMapEnd();
-                else Map.main.DragMapEnd();
+                if (!fing2_down && fing1_holding) MapScroller.main.ZoomMapEnd();
+                else MapScroller.main.DragMapEnd();
                 if (fing1_holding) isHeldUp = true;
                 break;
             case 2://print("up 2");
-                Map.main.ZoomMapEnd();
+                MapScroller.main.ZoomMapEnd();
                 break;
         }
     }
@@ -186,12 +188,11 @@ public class MapControls : MonoBehaviour
         switch(finger)
         {
             case 1://print("tap drag 1");
-                if (!screen_world_ratio_init) { screen_world_ratio_init = true; screen_world_ratio = GetScreenToWorldRatio(); }
-                Map.main.DragMap((fing1_down_pos - fing1.position) * screen_world_ratio);
+                MapScroller.main.DragMap((fing1_down_pos - fing1.position) * screen_world_ratio);
                 isTapDragged = true;
                 break;
             case 2://print("tap drag 2");
-                Map.main.ZoomMap(
+                MapScroller.main.ZoomMap(
                     (Vector2.Distance(fing1.position,fing2.position) - 
                         Vector2.Distance(fing1_down_pos,fing2_down_pos))
                     / screen.y );
@@ -208,8 +209,8 @@ public class MapControls : MonoBehaviour
                 // Users can put 2nd finger down to do 2-finger zoom while doing 1-finger zoom, hence this condition.
                 if (!fing2_down)
                 {
-                    Map.main.ZoomMap( (fing1_down_pos.y - fing1.position.y) / screen.y );
-                    screen_world_ratio = GetScreenToWorldRatio();
+                    MapScroller.main.ZoomMap( (fing1_down_pos.y - fing1.position.y) / screen.y );
+                    UpdateScreenToWorldRatio();
                 }
                 isHoldDragged = true;
                 break;
@@ -233,5 +234,12 @@ public class MapControls : MonoBehaviour
         Vector3 top_rgt_world_pos = ScreenToMapPoint(screen);
         return new Vector2((top_rgt_world_pos.x - btm_lft_world_pos.x) / screen.x, 
             (top_rgt_world_pos.y - btm_lft_world_pos.y) / screen.y);
+    }
+    // There are other mechanics to zoom the map, so this is public.
+    public static void UpdateScreenToWorldRatio() { main.StartCoroutine(main.UpdateScreenToWorldRatioCoroutine()); }
+    IEnumerator UpdateScreenToWorldRatioCoroutine()
+    {
+        yield return new WaitForSeconds(0.1f);
+        screen_world_ratio = GetScreenToWorldRatio();
     }
 }

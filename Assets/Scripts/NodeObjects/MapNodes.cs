@@ -10,9 +10,11 @@ public class MapNodes : MonoBehaviour
     public string id; // It'll be the identifier of the node when stored in text file.
     public List<MapNodes> links;
     public string derived_obj{get; protected set;} // This way, GetComponent() only runs on the correct type and I'm not using built-in tags for now.
+    [HideInInspector] public MapStructures structure_belong; // This will be supplied by MapStructures instances on Awake().
 
     public static List<MapNodes> nodes = new List<MapNodes>();
     public static List<MainNode> main_nodes = new List<MainNode>();
+    public static Dictionary<MainNode,List<AlternateNode>> main_node_alts = new Dictionary<MainNode,List<AlternateNode>>();
 
     protected virtual void Awake() {
         nodes.Add(this);

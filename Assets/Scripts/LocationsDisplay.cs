@@ -46,7 +46,7 @@ public class LocationsDisplay : MonoBehaviour
             bearing_txt.text = string.Format("Bearing: {0}", Locations.main.bearing_current);
             
         } else if (Locations.main.use_fake_gps) {
-            Vector2 fake_gps = GPSEncoder.USCToGPS(Map.main.user_pos.position);
+            Vector2 fake_gps = GPSEncoder.USCToGPS(Map.main.user_pin.transform.position);
             lati_txt.text = string.Format("Latitude: {0}", fake_gps.x);
             long_txt.text = string.Format("Longitude: {0}", fake_gps.y);
             alti_txt.text = string.Format("Altitude: {0}", "N/A");
@@ -65,7 +65,7 @@ public class LocationsDisplay : MonoBehaviour
                 time_disp_2.text = string.Format("{0}:{1}:{2}",t.Hour,t.Minute,t.Second);
             } else if (Locations.main.use_fake_gps) {
                 displ_txt.text = string.Format("Displacement:\nx:{0:0.0####}, \ny:{1:0.0####}, \nz:{2:0.0####}",
-                    Map.main.user_pos.position.x, Map.main.user_pos.position.y, Map.main.user_pos.position.z);
+                    Map.main.user_pin.transform.position.x, Map.main.user_pin.transform.position.y, Map.main.user_pin.transform.position.z);
             }
         }
     }

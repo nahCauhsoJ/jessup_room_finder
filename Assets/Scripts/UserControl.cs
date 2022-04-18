@@ -37,11 +37,12 @@ public class UserControl : MonoBehaviour
     {
         main = this;
         nodes_layer = LayerMask.GetMask("nodes");
+        gameObject.SetActive(false);
     }
 
     void OnEnable()
     {
-        DestinationReset();
+        //DestinationReset();
     }
 
     void Update()
@@ -80,7 +81,13 @@ public class UserControl : MonoBehaviour
 
         CheckNodeArrival(valid_nodes_nearby);
 
-        slow_update_elapsed += Time.deltaTime;
+        // Now that nodes can overlap on top (Due to being different floors), it is a bad idea to use CompareRoutes that often.
+        //      Since there is no need for a reroute unless the user derails from the route, and there is only a handful of
+        //      method that does that (MoveUser), there is no need to run it every second. This real time GPS
+        //      tracking is the only one that needs constant update, and it's a legacy design. Hence this.
+        // Note that due to this, MoveUser will have a CompareRoute().
+        if (Locations.main.use_real_time_gps_tracking)
+            slow_update_elapsed += Time.deltaTime;
         if (slow_update_elapsed >= 1f) { slow_update_elapsed = 0; SlowUpdate(); }
     }
 
@@ -96,16 +103,12 @@ public class UserControl : MonoBehaviour
     public void InitiateDestinations(MapNodes[] dests)
     {
         destination_choices = dests;
-        /*
-        best_dest = new Dictionary<MapNodes, MapNodes>();
-        reroute_inferior_history = new Dictionary<MapNodes, HashSet<MapNodes>>();
-        reroute_superior_history = new Dictionary<MapNodes, HashSet<MapNodes>>();
-        paths = new Dictionary<MapNodes, List<MapNodes>>();
-        paths_length = new Dictionary<MapNodes, float>();*/
+
         best_dest.Clear();
         reroute_inferior_history.Clear();
         reroute_superior_history.Clear();
         paths.Clear();
+        paths_length.Clear();
         slow_update_elapsed = 0f; // Cuz why not.
         // invalid_nodes need no cleaning. Its data will be useful for the whole runtime.
         // node_dict also needs no cleaning, we need those collider -> MapNodes references.
@@ -151,7 +154,7 @@ public class UserControl : MonoBehaviour
             //   until out of range.
             //if (prev_target_node != null && prev_target_node != i) continue;
 
-            float sqr_dist = (Map.main.user_pos.position - i.transform.position).sqrMagnitude;
+            float sqr_dist = (Map.main.user_pin.transform.position - i.transform.position).sqrMagnitude;
             if ( sqr_dist <= arrival_radius * arrival_radius )
             {
                 //if (prev_target_node != null) return; // Rmb that when != null, only prev_target_node does the checking.
@@ -159,29 +162,38 @@ public class UserControl : MonoBehaviour
                 if (closest_node_found == null) { closest_node_found = i; closest_node_found_sqr_dist = sqr_dist; }
                 else if (sqr_dist >= closest_node_found_sqr_dist) continue; // Means that there's a closer node than this.
                 else { closest_node_found = i; closest_node_found_sqr_dist = sqr_dist; }
-/*
-                if (Map.main.current_route[Map.main.current_route_target_ix].links.Contains(i))
-                { node_links_target = true; break; } // break cuz node that links to target takes priority.
-
-                if (closest_node_found == Map.main.current_route[Map.main.current_route_target_ix])
-                {
-                    Map.main.TrimRoute(1);
-                    prev_target_node = i;
-                    return;
-                }*/
-            }/* else if (prev_target_node != null) {
-                // Yes this gives a 1-tick free time. Not like it matters.
-                prev_target_node = null;
-                return; // This return statement is why it needs a condition.
-            }*/
+            }
         }
 
         if (closest_node_found != null)
         {
             if (closest_node_found == prev_target_node) return;
             prev_target_node = closest_node_found;
-            bool need_reroute = true;
 
+            // This is what runs the structure transition animation.
+            // When this is false, it means the user just started or has set up a new route.
+            //      Just in case the user starts inside a structure, else statement will handle it.
+            if (Map.main.current_route_target_ix - 1 >= 0)
+            {
+                MapStructureTransition.main.CompareStructures(
+                    Map.main.current_route[Map.main.current_route_target_ix], 
+                    Map.main.current_route[Map.main.current_route_target_ix - 1]
+                );
+            } else {
+                // Can't define which node is in the master map. But it just one less fade.
+                MapStructureTransition.main.CompareStructures(
+                    Map.main.current_route[0].structure_belong,
+                    MapStructures.current
+                );
+            }
+
+            // It's better to put this here instead of NodeNav's MoveToNextTarget, since icon doesn't just need updating
+            //      when going to next node, but also re-positioning.
+            NodeNav.main.UpdateTargetIcon();
+
+            
+
+            bool need_reroute = true;
             for (var i = 0; i < Map.main.current_route_remaining.Count; i++)
             {
                 if (closest_node_found == Map.main.current_route[Map.main.current_route_target_ix + i])
@@ -197,36 +209,40 @@ public class UserControl : MonoBehaviour
             {
                 // Note that the loop above deals with the case when the link is the next target.
                 Map.main.PrependRoute(closest_node_found);
+                // Since PrependRoute() once took over the same node as prev_target_node, which causes this function to stop 
+                //      checking the node the user is literally standing on, prev_target_node needs to be wiped for a re-check.
+                prev_target_node = null;
                 need_reroute = false;
             }
             
             if (need_reroute) Map.main.SetupRoute(Map.main.current_route[Map.main.current_route.Count - 1]);
-
-            StructureTransition trans_node = StructureTransition.GetObj(closest_node_found);
-            if (trans_node != null)
-            {
-                int anim_style = 0;
-                if (StructureTransition.current_layer > trans_node.trans_to.map_layer) anim_style = 2;
-                else if (StructureTransition.current_layer < trans_node.trans_to.map_layer) anim_style = 1;
-                MapStructureTransition.main.TransToStructure(trans_node.trans_to, anim_style);
-            }
         } else prev_target_node = null;
     }
 
     // Running this already assumes that there is another node after the target node in the route. Hence + 1 is safe.
-    void CompareRoutes()
+    public void CompareRoutes()
     {
+        // This can run without a route. Hence a validation is needed.
+        if (!Map.main.user_pin.gameObject.activeInHierarchy) return;
+
         MapNodes cur_node = Map.main.current_route[Map.main.current_route_target_ix]; // Too long. I'm shortening it.
 
         MapNodes closest_node = cur_node;
         float closest_node_dist = PathBuilder.GetPathLength(Map.main.current_route);
         foreach (var i in valid_nodes_nearby)
         {
+            // This is to tell all found nodes which destination is it bound to.
             if (!best_dest.ContainsKey(i))
             {
                 UpdatePath(i); // Remember after running this, both paths and paths_length are modified.
                 best_dest[i] = paths[i][paths[i].Count - 1];
             }
+
+            // There's no need to check nodes you have gone through in the route, and for sure the next node is closer
+            //      to the destination, so it should be ignored if we don't want the system teleport the user
+            //      automatically.
+            if (Map.main.current_route.Contains(i)) continue;
+
             MapNodes dest = best_dest[i];
             int dest_ix = GetDestIndex(dest);
 
@@ -254,94 +270,31 @@ public class UserControl : MonoBehaviour
         }
 
         if (closest_node == cur_node || paths_length[cur_node] - closest_node_dist < reroute_thres) return;
-        
+
         // Anything below assumes that a reroute is guaranteed.
 
         MapNodes user_closest_node = closest_node;
-        float user_closest_node_dist = Vector3.Distance(closest_node.transform.position, Map.main.user_pin.transform.position);
+        /*float user_closest_node_dist = Vector3.Distance(closest_node.transform.position, Map.main.user_pin.transform.position);
         foreach(var i in valid_nodes_nearby)
         {
             if (i == closest_node) continue;
             if (paths[closest_node].Count >= paths[i].Count) continue;
 
-            if (!paths[closest_node].Except(paths[i]).Any())
+            // This means the node will be excluded if this node's path is a subset of the closest node's path.
+            // It's here because if i's path is a subset of closest_node's path, then surely node i will be further than
+            //      the closest node. That can omit 1 Vector3.Distance() calculation, which has a square root inside.
+            if (paths[closest_node].Except(paths[i]).Any()) continue;
+
+            float user_current_node_dist = Vector3.Distance(i.transform.position, Map.main.user_pin.transform.position);
+            if (user_current_node_dist < user_closest_node_dist)
             {
-                float user_current_node_dist = Vector3.Distance(i.transform.position, Map.main.user_pin.transform.position);
-                if (user_current_node_dist < user_closest_node_dist)
-                {
-                    user_closest_node = i;
-                    user_closest_node_dist = user_current_node_dist;
-                }
+                user_closest_node = i;
+                user_closest_node_dist = user_current_node_dist;
             }
-        }
-        Map.main.SetupRoute(null, paths[user_closest_node]);
-        print("rerouting...");
-
-
-
-
-        /*
-        // Just in case the current target node does not have data for its route.
-        if (!paths[ix].ContainsKey(Map.main.current_route[Map.main.current_route_target_ix]))
-            paths[ix][Map.main.current_route[Map.main.current_route_target_ix]] = new List<MapNodes>(Map.main.current_route_remaining);
-
-        float target_dist_to_dest_sqr = ( Map.main.current_route[Map.main.current_route.Count - 1].transform.position - 
-                Map.main.current_route[Map.main.current_route_target_ix].transform.position ).sqrMagnitude;
-        MapNodes closest_node = Map.main.current_route[Map.main.current_route_target_ix];
-        float closest_node_dist_to_dest_sqr = target_dist_to_dest_sqr;
-        foreach (var i in valid_nodes_nearby)
-        {
-            if (i == Map.main.current_route[Map.main.current_route_target_ix]) continue;
-            float dist_to_dest_sqr = ( Map.main.current_route[Map.main.current_route.Count - 1].transform.position - 
-                i.transform.position ).sqrMagnitude;
-            if (reroute_inferior_history.ContainsKey(closest_node) && reroute_inferior_history[closest_node].Contains(i))
-            {   // This is simply using the cached results from the reroute history dictionaries.
-                //print("inferior"+closest_node.gameObject.name + i.gameObject.name);
-                closest_node = i;
-                closest_node_dist_to_dest_sqr = dist_to_dest_sqr;
-                continue;
-            }
-            if ((reroute_superior_history.ContainsKey(closest_node) && reroute_superior_history[closest_node].Contains(i)))
-            {
-                //print("superior"+closest_node.gameObject.name + i.gameObject.name);
-                continue;
-            }
-
-            if ( target_dist_to_dest_sqr - dist_to_dest_sqr >= reroute_thres)
-            {
-                if (!paths.ContainsKey(i))
-                    paths[i] = PathBuilder.GetPath(i, Map.main.current_route[Map.main.current_route.Count - 1], MapNodes.nodes);
-                bool new_path_inferior = false;
-                foreach (var j in paths[i])
-                {
-                    // This means that if the new route contains the current target node, then this route
-                    //      is for sure longer than the current one, hence marking this node's route to be inferior
-                    //      to the current target node's route in terms of walk distance.
-                    if (j == Map.main.current_route[Map.main.current_route_target_ix])
-                    {
-                        new_path_inferior = true;
-                        AddRerouteHistory(i,j);
-                        break;
-                    }
-                }
-                if (new_path_inferior) continue;
-                AddRerouteHistory(Map.main.current_route[Map.main.current_route_target_ix],i);
-
-                if (dist_to_dest_sqr < closest_node_dist_to_dest_sqr)
-                {
-                    AddRerouteHistory(closest_node,i);
-                    closest_node = i;
-                    closest_node_dist_to_dest_sqr = dist_to_dest_sqr;
-                } else AddRerouteHistory(i,closest_node);
-            }
-        }
-
-        if (closest_node != Map.main.current_route[Map.main.current_route_target_ix])
-        {
-            Map.main.SetupRoute(null, paths[closest_node]);
-            print("rerouting...");
-            DestinationReset();
         }*/
+
+        Map.main.SetupRoute(null, paths[user_closest_node]);
+        FloatMessage.Send("Rerouting...");
     }
 
     void AddRerouteHistory(MapNodes inferior, MapNodes superior)
@@ -350,9 +303,15 @@ public class UserControl : MonoBehaviour
         reroute_inferior_history[inferior].Add(superior);
         if (!reroute_superior_history.ContainsKey(superior)) reroute_superior_history[superior] = new HashSet<MapNodes>();
         reroute_superior_history[superior].Add(inferior);
+
+        /*foreach (var i in reroute_inferior_history)
+        {
+            print(string.Format("{0}: {1}, ", i.Key.ToString(), DebugLog.ListToString(i.Value)));
+        }*/
     }
 
     // All the reroute history and paths have to be wiped when the destination changes.
+    /*
     public void DestinationReset()
     {
         reroute_inferior_history.Clear();
@@ -362,5 +321,5 @@ public class UserControl : MonoBehaviour
         // invalid_nodes need no cleaning. Its data will be useful for the whole runtime.
         // node_dict also needs no cleaning, we need those collider -> MapNodes references.
         prev_target_node = null;
-    }
+    }*/
 }

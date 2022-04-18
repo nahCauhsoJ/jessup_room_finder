@@ -6,17 +6,21 @@ public class Locations : MonoBehaviour
 {
     public static Locations main;
 
+    [Header("Sensors")]
     public bool use_gps;
     public bool use_compass;
-    public Vector3 jessup_gps_location; // For altitude, just choose a point and that's our ground level.
+
+    [Header("Origin of campus's coordinate system")]
     public double jessup_gps_latitude;
     public double jessup_gps_longitude;
+    public float meter_to_unit_ratio_latitude;
+    public float meter_to_unit_ratio_longitude;
+
+    [Header("Bearing configurations")]
     public float bearing_max_vel;
     float bearing_smooth_vel;
     public float bearing_current{get; private set;}
     public float bearing_fake_rot; // For debugging use. Use left and right arrow to change it slowly.
-
-    public bool use_real_time_gps_tracking; // It was a legacy design. Until gps gives a more accurate position, I doubt it will be used.
 
     public bool loc_service_on{get; private set;}
     public static gps_status conn_status;
@@ -24,13 +28,16 @@ public class Locations : MonoBehaviour
     public int gps_conn_max_wait = 10; // This is the max tries the system will attempt to connect to the device's GPS.
     public int gps_conn_cur_wait{get; private set;} // This is the number of tries remaining.
 
+    [Header("Legacy functions")]
+    public bool use_real_time_gps_tracking; // It was a legacy design. Until gps gives a more accurate position, I doubt it will be used.
+    
+
     public double last_updated_time{get; private set;}
     public Vector3 displ{get; private set;} = Vector3.zero;
     Vector3 accel = Vector3.zero;
 
     // Just to test on laptop.
-    // Note that fake gps will be used with jessup_gps_location as origin. Hence 0,0 isn't rlly 0,0 in gps reading.
-    //public Vector3 fake_gps; // x: lati, y: alti, z: long
+    // Note that fake gps will consider jessup_gps as origin. Hence, it's an offset.
     public bool use_fake_gps{get; private set;}
 
     void Awake()
@@ -38,12 +45,12 @@ public class Locations : MonoBehaviour
         main = this;
         GPSEncoder.SetLocalOrigin(new Vector2 ((float) jessup_gps_latitude, (float) jessup_gps_longitude));
     }
-
+    Vector3 gyro_angle;
     // Start is called before the first frame update
     void Start()
     {
         if (use_gps) StartupGps();
-        //Input.gyro.enabled = true;
+        Input.gyro.enabled = true;
     }
 
     // Update is called once per frame
@@ -52,26 +59,13 @@ public class Locations : MonoBehaviour
         if (loc_service_on)
         {
             last_updated_time = Input.location.lastData.timestamp;
-            bearing_current = Mathf.SmoothDampAngle(bearing_current, Input.compass.trueHeading, ref bearing_smooth_vel, bearing_max_vel);
-
+            bearing_current = Mathf.SmoothDampAngle(bearing_current, Input.compass.magneticHeading, ref bearing_smooth_vel, bearing_max_vel);
+            //GetBearing();
         } else if (use_fake_gps) {
             if (Input.GetKey("left")) bearing_fake_rot += 1f;
             if (Input.GetKey("right")) bearing_fake_rot -= 1f;
             bearing_current = Mathf.SmoothDampAngle(bearing_current, bearing_fake_rot, ref bearing_smooth_vel, bearing_max_vel);
         }
-
-        /*
-        accel = Input.gyro.userAcceleration;
-        displ += accel * 0.5f * Time.deltaTime * Time.deltaTime;
-
-        cur_accel_txt_update_time += Time.deltaTime;
-        if (cur_accel_txt_update_time >= accel_txt_update_time)
-        {
-            cur_accel_txt_update_time = 0;
-            accel_txt.text = string.Format("Accel: x:{0:0.0####},\n y:{1:0.0####}, \nz:{2:0.0####}", accel.x, accel.y, accel.z);
-            displ_txt.text = string.Format("Disp: x:{0:0.0####}, \ny:{1:0.0####}, \nz:{2:0.0####}", displ.x, displ.y, displ.z);
-            time_disp_2.text = string.Format("{0}:{1}:{2}",t.Hour,t.Minute,t.Second);
-        }*/
     }
 
     IEnumerator StartLocationService()
@@ -127,6 +121,43 @@ public class Locations : MonoBehaviour
 
         displ = GPSEncoder.GPSToUCS(Input.location.lastData.latitude, Input.location.lastData.longitude) - 
                         GPSEncoder.GPSToUCS((float) jessup_gps_latitude, (float) jessup_gps_longitude);
+        displ = new Vector3(displ.x / meter_to_unit_ratio_latitude, 0, displ.z / meter_to_unit_ratio_longitude);
         return new Vector3(displ.x, displ.z, 0);
     }
+
+    // This is a huge waste of time.
+    /*public float GetBearing()
+    {
+        float heading = Mathf.Atan2(Input.compass.rawVector.y, Input.compass.rawVector.x) * 180 / Mathf.PI;
+        //print(string.Format("{0}, {1}", heading, Input.compass.magneticHeading));
+        //print(string.Format("{0}, {1}, {2}", Input.compass.rawVector.x, Input.compass.rawVector.y, Input.compass.rawVector.z));
+        //gyro_angle += Input.gyro.rotationRateUnbiased * Input.gyro.updateInterval;
+        //print(string.Format("{0}, {1}, {2}", gyro_angle.x, gyro_angle.y, gyro_angle.z));
+        //Quaternion rot = (new Quaternion(Input.gyro.attitude.x, Input.gyro.attitude.y, -Input.gyro.attitude.z, -Input.gyro.attitude.w)) * Quaternion.Euler(90f, 0f, 0f);
+        //float roll = Mathf.Atan2(2*rot.x*rot.w - 2*rot.y*rot.z, 1 - 2*rot.x*rot.x - 2*rot.z*rot.z);
+        //float pitch = -Mathf.Atan2(2*rot.y*rot.w - 2*rot.x*rot.z, 1 - 2*rot.y*rot.y - 2*rot.z*rot.z);
+        //float yaw = Mathf.Asin(2*rot.x*rot.y + 2*rot.z*rot.w);
+
+        Quaternion rot = Input.gyro.attitude;
+        float bad_roll = Mathf.Atan2(2*(rot.y*rot.w-rot.x*rot.z), 1-2*(rot.y*rot.y+rot.z*rot.z));
+        float bad_pitch = Mathf.Atan2(2*(rot.x*rot.w-rot.y*rot.z), 1-2*(rot.x*rot.x+rot.z*rot.z));
+        float yaw = Mathf.Asin(2*(rot.x*rot.y+rot.z*rot.w));
+        float roll = bad_pitch;
+        float pitch = -bad_roll;
+
+        print(string.Format("{0}, {1}, {2}", Input.compass.trueHeading, bad_pitch* 180 / Mathf.PI, yaw * 180 / Mathf.PI));
+
+
+        float mag_x = Input.compass.rawVector.x * Mathf.Cos(pitch) + 
+            Input.compass.rawVector.y * Mathf.Sin(roll) * Mathf.Sin(pitch) - 
+            Input.compass.rawVector.z * Mathf.Cos(roll) * Mathf.Sin(pitch);
+        float mag_y = Input.compass.rawVector.y * Mathf.Cos(roll) + 
+            Input.compass.rawVector.z * Mathf.Sin(roll);
+        float good_heading = Mathf.Atan2(mag_y, mag_x) * 180 / Mathf.PI;
+
+        //print(good_heading);
+        //print(string.Format("{0}, {1}, {2}", true_rot.eulerAngles.x, true_rot.eulerAngles.y, true_rot.eulerAngles.z));
+
+        return 0;
+    }*/
 }

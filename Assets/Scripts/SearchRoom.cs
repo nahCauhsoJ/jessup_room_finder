@@ -17,6 +17,13 @@ public class SearchRoom : MonoBehaviour
     List<MainNode> search_result = new List<MainNode>();
     MapNodes chosen_destination; // If it's not null, it is most likely asking where the user is.
 
+    public MessageScriptableObject pathfinder_start_instructions;
+
+    public static string Strip4Search(string orig_txt)
+    {
+        return string.Join("", orig_txt.Split(default(string[]), System.StringSplitOptions.RemoveEmptyEntries)).ToLower();
+    }
+
     void Awake()
     {
         main = this;
@@ -34,12 +41,13 @@ public class SearchRoom : MonoBehaviour
     public List<MainNode> GetMatches(string pattern)
     {
         // This is to remove whitespace and convert them to lower casing.
-        pattern = string.Join("", pattern.Split(default(string[]), System.StringSplitOptions.RemoveEmptyEntries)).ToLower();
+        pattern = Strip4Search(pattern);
         List<MainNode> result = new List<MainNode>();
         foreach (var i in MapNodes.main_nodes)
         {
-            if (i.id.Contains(pattern)) { result.Add(i); continue; }
-            foreach (var j in i.search_keys) if (j.Contains(pattern)) { result.Add(i); break; }
+            if (Strip4Search(i.id).Contains(pattern)) { result.Add(i); continue; }
+            if (Strip4Search(i.disp_name).Contains(pattern)) { result.Add(i); continue; }
+            foreach (var j in i.search_keys) if (Strip4Search(j).Contains(pattern)) { result.Add(i); break; }
         }
         return result;
     }
@@ -101,7 +109,17 @@ public class SearchRoom : MonoBehaviour
     {
         if (chosen_destination == null) return;
 
+        // Note that a destination change only occurs on search. Hence no data is wiped on reroute unless it's run by
+        //      this method.
+
+        List<MapNodes> destinations = new List<MapNodes>();
+        if (MapNodes.main_node_alts.ContainsKey((MainNode) chosen_destination))
+            destinations.AddRange(MapNodes.main_node_alts[(MainNode) chosen_destination]);
+        destinations.Add(chosen_destination);
+        UserControl.main.InitiateDestinations(destinations.ToArray());
         Map.main.SetupRoute(chosen_destination);
+
         chosen_destination = null;
+        BoxMessage.Send_SO(pathfinder_start_instructions);
     }
 }

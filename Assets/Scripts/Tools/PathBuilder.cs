@@ -36,7 +36,10 @@ public static class PathBuilder
             foreach (var i in best_node.links)
             {
                 if (i == null) continue; // Sometimes the links can be missing. If not take this away.
+                // If used, it's once a best node. If this runs, it means that one of its links is
+                //      better than it. Hence, it will not be considered.
                 if (used_nodes.Contains(i)) continue;
+                if (astar_costs.ContainsKey(i)) continue;
 
                 float g_cost = Vector3.Distance(i.transform.position, start_node.transform.position);
                 float h_cost = Vector3.Distance(i.transform.position, end_node.transform.position);

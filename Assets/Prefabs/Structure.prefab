@@ -46,6 +46,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   disp_name: 
+  structure_layer: 1
+  structure_floor: 1
   nodes_inside: []
 --- !u!1 &1082428822265599359
 GameObject:

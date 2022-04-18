@@ -19,7 +19,6 @@ public class NodeNavBtn : MonoBehaviour
     public void MoveToPos(Vector3 world_pos)
     {
         transform.position = world_pos;
-        //rectTransform.anchoredPosition = NodeNav.main_cam.WorldToScreenPoint(world_pos);
     }
 
     public void OnClick()

@@ -67,6 +67,12 @@ public class MapMenu : MonoBehaviour
         OnDropdownClick(); // Does nothing until implemented
     }
 
+    public void OnTutorialClick()
+    {
+        OpenUI();
+        OnDropdownClick();
+    }
+
     // true: show back the dropdown menu, false: hide the dropdown menu
     public void ToggleDropdown(bool tf)
     {

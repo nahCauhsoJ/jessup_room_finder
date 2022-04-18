@@ -37,13 +37,6 @@ public class MoveUser : MonoBehaviour
     void Update()
     {
         pinpoint_img.transform.position = pinpoint_world_pos;
-
-        if (MapControls.isTapped && 1==2)
-        {
-            MovePinpointToScreen(MapControls.main.fing1.position);
-            needs_confirm = true;
-        }
-
         ask_gps_btn.interactable = Locations.main.use_gps;
         confirm_text.text = needs_confirm ? "Confirm" : "Cancel";
     }
@@ -65,7 +58,7 @@ public class MoveUser : MonoBehaviour
 
     public static void FindUser()
     {
-        Map.main.DragMapReset();
+        MapScroller.main.DragMapReset();
         MoveUser.main.MovePinpointToWorld(Map.main.user_pin.transform.position);
     }
 
@@ -85,6 +78,9 @@ public class MoveUser : MonoBehaviour
     public void OnAskGps()
     {
         MovePinpointToWorld(Locations.main.GetPosByGps());
+        MapScroller.main.DragMapReset();
+        MapScroller.main.map_offset = pinpoint_world_pos;
+        needs_confirm = true;
     }
 
     public void OnConfirm()
@@ -93,8 +89,10 @@ public class MoveUser : MonoBehaviour
         {
             Map.main.user_pin.transform.position = new Vector3(
                 pinpoint_world_pos.x, pinpoint_world_pos.y, Map.main.user_pin.transform.position.z);
+            if (Map.main.user_pin.gameObject.activeInHierarchy) Map.main.CheckInbetweenNodes(); // OnConfirm() can run without a route.
             needs_confirm = false;
-            Map.main.DragMapReset();
+            MapScroller.main.DragMapReset();
+            UserControl.main.CompareRoutes();
         }
         MapMenu.main.OnDropdownClick();
     }
