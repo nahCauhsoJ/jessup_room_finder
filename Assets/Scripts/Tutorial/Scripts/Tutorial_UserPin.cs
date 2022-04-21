@@ -23,8 +23,8 @@ public class Tutorial_UserPin : TutorialScriptBase
     void pt2()
     {
         SetMessage(@"
-            To tell the system where you are (so that we can guide you), click on this 3 dots and select Move. 
-            If you don't know how to use the Move feature, there is a section in the tutorial list.
+            To tell the system where you are (so that we can guide you), click on the Menu Bar on the top left and select Move. 
+            If you don't know how to use the Move feature, there is a section in the tutorial list (Under construction...).
         ");
     }
 }

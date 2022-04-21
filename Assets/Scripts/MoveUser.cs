@@ -10,7 +10,10 @@ public class MoveUser : MonoBehaviour
     Camera main_cam;
     public Image pinpoint_img;
     public Button ask_gps_btn;
-    public TMPro.TMP_Text confirm_text;
+    public Button confirm_btn;
+
+    public Color pinpoint_allow_color;
+    public Color pinpoint_disallow_color;
 
     public bool needs_confirm{get; set;}
 
@@ -27,6 +30,7 @@ public class MoveUser : MonoBehaviour
     void OnEnable()
     { 
         pinpoint_img.gameObject.SetActive(true);
+        UpdatePinpointState();
     }
     void OnDisable()
     {
@@ -38,7 +42,7 @@ public class MoveUser : MonoBehaviour
     {
         pinpoint_img.transform.position = pinpoint_world_pos;
         ask_gps_btn.interactable = Locations.main.use_gps;
-        confirm_text.text = needs_confirm ? "Confirm" : "Cancel";
+        confirm_btn.interactable = needs_confirm;
     }
 
     // This moves that cursor to a target spot via world coordinates
@@ -54,17 +58,32 @@ public class MoveUser : MonoBehaviour
         pinpoint_world_pos = new Vector3(pinpoint_world_pos.x, pinpoint_world_pos.y, 0);
     }
 
+    // Checks if the pinpoint position is within borders. It returns the result for
+    //      processing, but the color change is automatic.
+    bool UpdatePinpointState()
+    {
+        if (!CampusBorder.OnCampus(pinpoint_world_pos))
+        {
+            pinpoint_img.color = pinpoint_disallow_color;
+            return false;
+        }
+        pinpoint_img.color = pinpoint_allow_color;
+        return true;
+    }
+
 
 
     public static void FindUser()
     {
         MapScroller.main.DragMapReset();
-        MoveUser.main.MovePinpointToWorld(Map.main.user_pin.transform.position);
+        main.MovePinpointToWorld(Map.main.user_pin.transform.position);
+        main.UpdatePinpointState();
     }
 
     public static void Recenter()
     {
-        MoveUser.main.MovePinpointToScreen(new Vector2(Screen.width / 2, Screen.height / 2));
+        main.MovePinpointToScreen(new Vector2(Screen.width / 2, Screen.height / 2));
+        main.UpdatePinpointState();
     }
 
     
@@ -72,28 +91,42 @@ public class MoveUser : MonoBehaviour
     public void OnMovePinpoint()
     {
         MovePinpointToScreen(MapControls.main.fing1.position);
-        needs_confirm = true;
+        needs_confirm = UpdatePinpointState();
     }
 
     public void OnAskGps()
     {
-        MovePinpointToWorld(Locations.main.GetPosByGps());
+        Vector3 gps_pos = Locations.main.GetPosByGps();
+
+        if (!CampusBorder.OnCampus(gps_pos))
+        {
+            BoxMessage.Send(@"You seem to be off-campus, so it's best to not ask your GPS for now. 
+                (If you're sure you're on-campus, it might be your GPS being slightly off the borders.)");
+            return;
+        }
+
+        // Running here already assumes that the pinpoint is within borders.
+        MovePinpointToWorld(gps_pos);
         MapScroller.main.DragMapReset();
         MapScroller.main.map_offset = pinpoint_world_pos;
         needs_confirm = true;
     }
 
+    public void OnCancel()
+    {
+        gameObject.SetActive(false);
+    }
     public void OnConfirm()
     {
-        if (needs_confirm)
-        {
-            Map.main.user_pin.transform.position = new Vector3(
-                pinpoint_world_pos.x, pinpoint_world_pos.y, Map.main.user_pin.transform.position.z);
-            if (Map.main.user_pin.gameObject.activeInHierarchy) Map.main.CheckInbetweenNodes(); // OnConfirm() can run without a route.
-            needs_confirm = false;
-            MapScroller.main.DragMapReset();
-            UserControl.main.CompareRoutes();
-        }
-        MapMenu.main.OnDropdownClick();
+        if (!needs_confirm) return; // Just in case...
+
+        Map.main.user_pin.transform.position = new Vector3(
+            pinpoint_world_pos.x, pinpoint_world_pos.y, Map.main.user_pin.transform.position.z);
+        if (Map.main.user_pin.gameObject.activeInHierarchy) Map.main.CheckInbetweenNodes(); // OnConfirm() can run without a route.
+        needs_confirm = false;
+        MapScroller.main.DragMapReset();
+        UserControl.main.CompareRoutes();
+
+        gameObject.SetActive(false);
     }
 }

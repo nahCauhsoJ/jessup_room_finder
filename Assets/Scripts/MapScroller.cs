@@ -9,10 +9,17 @@ public class MapScroller : MonoBehaviour
 
     public GameObject cam_target; // The actual spot the virtual camera is aiming at. For offsets.
 
+    public UnityEngine.UI.Image touchscreen_area; // This is the region where users can drag and zoom. Also used to set borders.
+
+    // This shrinks the movable area a little more so that the user doesn't see the black background with a quick swipe.
+    // Please make sure this one is positive in both ways. It modifies map_world_corners on Awake(). And it's world units.
+    public Vector2 map_border_padding;
+
+    // (deprecated)
     // Previously we set an origin for the GPS converter. Now we go to that location irl and mark that spot on the map.
     //      Calibrate map_obj's transform so that the dead center of the device means 0,0 in GPS measurement.
     //      This value below stores the pos.
-    public Vector2 map_origin_offset;
+    //public Vector2 map_origin_offset;
     
     public float map_scale; // Unlike map_scale_base, this is an offset in z-pos instead of its total value.
     public float map_scale_const; // Just a multiplier.
@@ -26,6 +33,10 @@ public class MapScroller : MonoBehaviour
     Vector2 map_offset_base;
     Quaternion map_rot_orig; // For now let's just leave it at identity
 
+    // This is what defines where the user can scroll to. Beyond this will push cam_target back.
+    Vector3[] map_world_corners = new Vector3[4];
+
+
 
 
     // To make sure the map isn't moving when user is clicking on something else, all the movement occurs only
@@ -35,6 +46,11 @@ public class MapScroller : MonoBehaviour
     void Awake()
     {
         main = this;
+        touchscreen_area.rectTransform.GetWorldCorners(map_world_corners);
+        map_world_corners[0] += (Vector3) map_border_padding;
+        map_world_corners[1] += new Vector3(map_border_padding.x, -map_border_padding.y, 0);
+        map_world_corners[2] -= (Vector3) map_border_padding;
+        map_world_corners[3] -= new Vector3(map_border_padding.x, -map_border_padding.y, 0);
         //map_rot_orig = Map.main.user_pin.transform.rotation;
     }
     void Start()
@@ -53,10 +69,12 @@ public class MapScroller : MonoBehaviour
     public void Update()
     {
         cam_target.transform.position = new Vector3(
-            map_offset.x + map_offset_current.x, 
+            map_offset.x + map_offset_current.x,
             map_offset.y + map_offset_current.y,
             map_scale + map_scale_current + map_scale_base
         );
+
+        map_offset += ClampedCameraPosition();
     }
 
 
@@ -95,5 +113,34 @@ public class MapScroller : MonoBehaviour
     {
         map_scale = new_map_scale - map_scale_current;
         MapControls.UpdateScreenToWorldRatio();
+    }
+
+
+
+    // ClampedCameraPosition is used for repositioning, this one's just for detection.
+    bool IsOutOfMap()
+    {
+        Vector2 bottom_left = MapControls.ScreenToMapPoint(Vector2.zero);
+        if (bottom_left.x < map_world_corners[0].x) return true;
+        if (bottom_left.y < map_world_corners[0].y) return true;
+        Vector2 top_right = MapControls.ScreenToMapPoint(new Vector2(Screen.currentResolution.width, Screen.currentResolution.height));
+        if (top_right.x > map_world_corners[2].x) return true;
+        if (top_right.y > map_world_corners[2].y) return true;
+        return false;
+    }
+
+    // This just gives an offset to subtract from map_offset, so that all 4 corners of the screen are inside the map.
+    Vector2 ClampedCameraPosition()
+    {
+        Vector2 return_offset = Vector2.zero;
+        Vector2 bottom_left = MapControls.ScreenToMapPoint(Vector2.zero);
+        Vector2 top_right = MapControls.ScreenToMapPoint(new Vector2(Screen.currentResolution.width, Screen.currentResolution.height));
+
+        if (bottom_left.x < map_world_corners[0].x) return_offset.x -= bottom_left.x - map_world_corners[0].x;
+        else if (top_right.x > map_world_corners[2].x) return_offset.x -= top_right.x - map_world_corners[2].x;
+        if (bottom_left.y < map_world_corners[0].y) return_offset.y -= bottom_left.y - map_world_corners[0].y;
+        else if (top_right.y > map_world_corners[2].y) return_offset.y -= top_right.y - map_world_corners[2].y;
+
+        return return_offset;
     }
 }

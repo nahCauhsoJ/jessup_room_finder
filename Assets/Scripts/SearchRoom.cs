@@ -98,11 +98,17 @@ public class SearchRoom : MonoBehaviour
         if (destination != null)
         {
             chosen_destination = destination;
-            MapMenu.main.OnDropdownClick();
+            //MapMenu.main.OnDropdownClick();
+            gameObject.SetActive(false);
             MapMenu.main.OnMoveClick();
             MoveUser.Recenter();
             MoveUser.main.needs_confirm = true;
         }
+    }
+
+    public void OnSelectMoreResult()
+    {
+        BoxMessage.Send(@"The UI for the grand list of results is not ready. But honestly, top 5 should suffice. Apologies regardless.");
     }
 
     public void UserPinpointedSignal()

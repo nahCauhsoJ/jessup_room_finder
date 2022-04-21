@@ -15,6 +15,15 @@ public class MapMenu : MonoBehaviour
     public Sprite more_actions_icon;
     public Sprite close_icon;
 
+
+
+    public Button menu_toggle;
+    public Image menu_tint;
+    public GameObject menu_content;
+
+    public bool menu_opened{get; private set;}
+
+
     // The custom states of dropdown_button
     //  1: Hiding Content (Default)
     //  2: Showing Content
@@ -23,75 +32,54 @@ public class MapMenu : MonoBehaviour
 
 
 
-    public void OnDropdownClick()
-    {
-        // Some functions disabled dropdown, but in all cases running this functions means it needs to come back.
-        ToggleDropdown(true);
 
-        switch (dd_btn_state)
+    // If tf is specified, it'll force an open/close.
+    public void OnMenuToggle()
+    {
+        if (menu_opened)
         {
-            case 1:
-                dd_btn_state = 2;
-                dropdown_image.sprite = close_icon;
-                dropdown_content.SetActive(true);
-                break;
-            case 2:
-                dd_btn_state = 1;
-                dropdown_image.sprite = more_actions_icon;
-                dropdown_content.SetActive(false);
-                break;
-            case -1:
-                dd_btn_state = 1;
-                dropdown_image.sprite = more_actions_icon;
-                CloseUI();
-                break;
+            menu_content.SetActive(false);
+            menu_tint.gameObject.SetActive(false);
+            menu_opened = false;
+        } else {
+            menu_content.SetActive(true);
+            menu_tint.gameObject.SetActive(true);
+            menu_opened = true;
         }
     }
+    public void OpenMenu()
+    {
+        menu_content.SetActive(true);
+        menu_tint.gameObject.SetActive(true);
+        menu_opened = true;
+    }
+    public void CloseMenu()
+    {
+        menu_content.SetActive(false);
+        menu_tint.gameObject.SetActive(false);
+        menu_opened = false;
+    }
+
+
 
     public void OnSearchClick()
     {
-        OpenUI();
         SearchRoom.main.gameObject.SetActive(true);
     }
 
     public void OnMoveClick()
     {
-        OpenUI();
         MoveUser.main.gameObject.SetActive(true);
-        ToggleDropdown(false);
-    }
-
-    public void OnSettingsClick()
-    {
-        OpenUI();
-        OnDropdownClick(); // Does nothing until implemented
     }
 
     public void OnTutorialClick()
     {
-        OpenUI();
-        OnDropdownClick();
+        Tutorial.main.gameObject.SetActive(true);
     }
 
-    // true: show back the dropdown menu, false: hide the dropdown menu
-    public void ToggleDropdown(bool tf)
+    // Does nothing until implemented
+    public void OnSettingsClick()
     {
-        dropdown_button.gameObject.SetActive(tf);
-    }
-
-
-
-    void OpenUI()
-    {
-        dd_btn_state = 2;
-        OnDropdownClick(); // I'm just lazy.
-        dd_btn_state = -1;
-        dropdown_image.sprite = close_icon;
-    }
-
-    void CloseUI()
-    {
-        SearchRoom.main.gameObject.SetActive(false);
-        MoveUser.main.gameObject.SetActive(false);
+        BoxMessage.Send(@"Settings are not ready. Apologies.");
     }
 }

@@ -28,9 +28,9 @@ public class MapControls : MonoBehaviour
     bool fing1_holding; // If true, user is holding the finger istead of tapping.
 
     // It's static since it's basically THE variable to define the map's scale.
-    public static Vector2 screen_world_ratio;
     // Since it requires the camera's position, and it only moves to the correct distance after 1 LateUpdate() in Map,
-    //      it is best to initialize it on the first map dragging.
+    //      it is currently initalized 0.1 second after first frame.
+    public static Vector2 screen_world_ratio;
 
     public static bool isTapped{get; private set;}
     public static bool isHeldDown{get; private set;}
@@ -221,10 +221,10 @@ public class MapControls : MonoBehaviour
 
 
 
-    Vector3 ScreenToMapPoint(Vector2 pos)
+    public static Vector3 ScreenToMapPoint(Vector2 pos)
     {
-        Vector3 screen_pos = new Vector3(pos.x, pos.y, Map.main.transform.position.z - cam.transform.position.z);
-        return cam.ScreenToWorldPoint(screen_pos);
+        Vector3 screen_pos = new Vector3(pos.x, pos.y, Map.main.transform.position.z - main.cam.transform.position.z);
+        return main.cam.ScreenToWorldPoint(screen_pos);
     }
 
     // Ratio changes upon zooming. Hence this runs every tick the camera moved back or forth.

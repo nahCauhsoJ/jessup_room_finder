@@ -236,6 +236,5 @@ public class Map : MonoBehaviour
         user_pin_inactive.SetActive(true);
         user_pin.gameObject.SetActive(false);
         path_target_link.gameObject.SetActive(false);
-        MapMenu.main.OnSearchClick();
     }
 }
